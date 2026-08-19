@@ -1,4 +1,4 @@
-/ All booking dates/hours are interpreted in a single fixed campus timezone
+// All booking dates/hours are interpreted in a single fixed campus timezone
 // (APP_TIMEZONE). There is no per-user timezone conversion in v1.
 
 const DEFAULT_TZ = process.env.APP_TIMEZONE || 'Asia/Kolkata';
