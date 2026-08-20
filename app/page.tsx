@@ -97,7 +97,160 @@ export default function Home() {
         .catch(() => setDetailsError('Could not load rooms. Please refresh the page.'));
 }, []);
 
-  return (
+    async function loadSlots(slug: string, dateVal: string) {
+            setSlotsLoading(true);
+            setSlotsError(null);
+            setSelectedHour(null);
+            try {
+                      const res = await fetch(`/api/slots?room_slug=${encodeURIComponent(slug)}&date=${encodeURIComponent(dateVal)}`);
+                      const data = await res.json();
+                      if (!res.ok) {
+                                  setSlots(null);
+                                  setSlotsError('Could not load availability for this date. Please try another date.');
+                                  return;
+                      }
+                      setSlots(data.slots);
+            } catch {
+                      setSlots(null);
+                      setSlotsError('Could not load availability. Check your connection and try again.');
+            } finally {
+                      setSlotsLoading(false);
+            }
+    }
+    
+      function handleDetailsSubmit(e: React.FormEvent) {
+              e.preventDefault();
+              if (!name.trim()) {
+                        setDetailsError('Please enter your full name.');
+                        return;
+              }
+              if (!isValidEmail(email)) {
+                        setDetailsError('Please enter a valid email address.');
+                        return;
+              }
+              if (!roomSlug) {
+                        setDetailsError('Please select a room.');
+                        return;
+              }
+              setDetailsError(null);
+              setStep('time');
+              const initialDate = date || dateOptions[0].value;
+              setDate(initialDate);
+              loadSlots(roomSlug, initialDate);
+      }
+    
+      function handleSelectDate(value: string) {
+              setDate(value);
+              loadSlots(roomSlug, value);
+      }
+    
+      function handleSelectSlot(hour: number) {
+              setSelectedHour(hour);
+      }
+    
+      function goToConfirm() {
+              if (selectedHour === null) return;
+              setConfirmError(null);
+              setStep('confirm');
+      }
+    
+      async function handleConfirmBooking() {
+              if (selectedHour === null) return;
+              setSubmitting(true);
+              setConfirmError(null);
+              try {
+                        const res = await fetch('/api/bookings', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                                  room_slug: roomSlug,
+                                                  student_name: name.trim(),
+                                                  student_email: email.trim(),
+                                                  booking_date: date,
+                                                  slot_hour: selectedHour,
+                                    }),
+                        });
+                        const data = await res.json();
+                  
+                        if (res.status === 201) {
+                                    setConfirmedBooking(data);
+                                    setStep('success');
+                                    return;
+                        }
+                        if (res.status === 409) {
+                                    setConfirmError('This slot was just booked by someone else. Please pick another.');
+                                    setStep('time');
+                                    loadSlots(roomSlug, date);
+                                    return;
+                        }
+                        if (data.error === 'slot_in_past') {
+                                    setConfirmError('That time has already passed. Please choose a later slot.');
+                        } else if (data.error === 'date_out_of_range') {
+                                    setConfirmError('That date is no longer available. Please choose another date.');
+                        } else {
+                                    setConfirmError('Something went wrong. Please try again.');
+                        }
+                        setStep('time');
+              } catch {
+                        setConfirmError('Something went wrong. Please check your connection and try again.');
+                        setStep('time');
+              } finally {
+                        setSubmitting(false);
+              }
+      }
+    
+      function resetWizard(keepDetails: boolean) {
+              setStep('details');
+              setDate('');
+              setSlots(null);
+              setSelectedHour(null);
+              setConfirmedBooking(null);
+              setConfirmError(null);
+              if (!keepDetails) {
+                        setName('');
+                        setEmail('');
+              }
+      }
+    
+      const selectedRoom = rooms.find((r) => r.slug === roomSlug);
+      const isToday = date === dateOptions[0]?.value;
+      const currentHour = new Date().getHours();
+    
+      const grouped = useMemo(() => {
+              if (!slots) return null;
+              const morning = slots.filter((s) => s.hour < 12);
+              const afternoon = slots.filter((s) => s.hour >= 12 && s.hour < 18);
+              const evening = slots.filter((s) => s.hour >= 18);
+              return { morning, afternoon, evening };
+      }, [slots]);
+    
+      function renderSlotButton(slot: Slot) {
+              const past = isToday && slot.hour <= currentHour;
+              const disabled = slot.booked || past;
+              const selected = selectedHour === slot.hour;
+              const base = 'py-2 rounded border text-sm transition-colors';
+              let cls = base;
+              if (selected) {
+                        cls += ' bg-action text-white border-action shadow-[0_4px_14px_0_rgba(59,130,246,0.39)]';
+              } else if (disabled) {
+                        cls += ' bg-surface-container-low text-text-muted border-surface-border cursor-not-allowed';
+              } else {
+                        cls += ' bg-white border-surface-border text-on-surface-variant hover:border-action hover:text-action';
+              }
+              return (
+                        <button
+                          key={slot.hour}
+                  type="button"
+                              disabled={disabled}
+                                          onClick={() => handleSelectSlot(slot.hour)}
+            className={cls}
+                      >
+                      {String(slot.hour).padStart(2, '0')}:00
+                                </button>
+                                        );
+}
+
+return (
         <>
           <SiteHeader />
       <main className="flex-grow pt-24 pb-12 px-4 md:px-6 max-w-container-max mx-auto w-full flex justify-center items-start">
